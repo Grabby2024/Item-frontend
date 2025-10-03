@@ -1,42 +1,58 @@
-import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+// Dashboard.jsx
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Menu,
-  Sun,
-  Moon,
-  LogOut,
-  Plus,
-  Search,
-  Bell,
-  Box,
-  Tag,
-  Clock,
-  X
+    Menu,
+    Sun,
+    Moon,
+    LogOut,
+    Plus,
+    Search,
+    Bell,
+    Box,
+    Tag,
+    Clock,
+    X,
+    AlertTriangle
 } from 'lucide-react';
 import './Dashboard.css';
 
-const API_BASE_URL = 'http://localhost:5000/api';
-
 const Dashboard = () => {
-    const [currentUser, setCurrentUser] = useState({ username: 'Admin' });
+    // ===== MOCK DATA =====
+    const mockCategories = [
+        { _id: 'cat1', name: 'Electronics', color: '#3b82f6' },
+        { _id: 'cat2', name: 'Office Supplies', color: '#10b981' },
+        { _id: 'cat3', name: 'Tools', color: '#f59e0b' },
+        { _id: 'cat4', name: 'Consumables', color: '#ef4444' },
+    ];
+
+    const mockItems = [
+        { _id: 'item1', name: 'Dell Monitor', category: mockCategories[0], quantity: 3, threshold: 5 },
+        { _id: 'item2', name: 'A4 Paper (Ream)', category: mockCategories[1], quantity: 20, threshold: 10 },
+        { _id: 'item3', name: 'Cordless Drill', category: mockCategories[2], quantity: 2, threshold: 3 },
+        { _id: 'item4', name: 'Ink Cartridge', category: mockCategories[3], quantity: 8, threshold: 10 },
+        { _id: 'item5', name: 'USB-C Cable', category: mockCategories[0], quantity: 15, threshold: 5 },
+    ];
+
+    const mockHistory = [
+        { _id: 'h1', itemId: 'item1', action: 'Add', quantity: 5, purpose: 'Initial stock', createdAt: '2024-07-20T10:00:00Z' },
+        { _id: 'h2', itemId: 'item2', action: 'Refill', quantity: 30, purpose: 'Bulk order', createdAt: '2024-07-22T14:30:00Z' },
+        { _id: 'h3', itemId: 'item1', action: 'Withdraw', quantity: 2, purpose: 'IT Dept', createdAt: '2024-07-24T09:15:00Z' },
+        { _id: 'h4', itemId: 'item3', action: 'Withdraw', quantity: 1, purpose: 'Maintenance', createdAt: '2024-07-25T11:00:00Z' },
+    ];
+
+    // ===== STATE =====
+    const [currentUser] = useState({ username: 'Admin' });
     const [darkMode, setDarkMode] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activePage, setActivePage] = useState('dashboard');
-    const [categories, setCategories] = useState([]);
-    const [items, setItems] = useState([]);
-    const [filteredItems, setFilteredItems] = useState([]);
-    const [itemHistory, setItemHistory] = useState([]);
-    const [stats, setStats] = useState({
-        totalItems: 0,
-        totalCategories: 0,
-        totalRefills: 0,
-        totalWithdrawals: 0,
-    });
-    const [loading, setLoading] = useState({ items: false, categories: false, history: false });
-    const [error, setError] = useState('');
+
+    const [categories] = useState(mockCategories);
+    const [items, setItems] = useState(mockItems);
+    const [itemHistory] = useState(mockHistory);
+
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('0');
-    const [lowStockItems, setLowStockItems] = useState([]);
+
     const [modals, setModals] = useState({
         addItem: false,
         withdrawItem: false,
@@ -45,280 +61,155 @@ const Dashboard = () => {
         lowStockModal: false,
         itemHistory: false,
     });
+
     const [formData, setFormData] = useState({
-        newCategory: '',
         itemName: '',
         itemCategory: '',
         itemQuantity: 0,
         itemThreshold: 1,
-        refillQuantity: 0,
-        withdrawQuantity: 0,
+        refillQuantity: 1,
+        withdrawQuantity: 1,
     });
+
     const [activeItem, setActiveItem] = useState(null);
 
-    const fetchData = async () => {
-        try {
-            setLoading({ items: true, categories: true, history: true });
-            const [itemsRes, categoriesRes, historyRes] = await Promise.all([
-                axios.get(`${API_BASE_URL}/items`),
-                axios.get(`${API_BASE_URL}/categories`),
-                axios.get(`${API_BASE_URL}/history`),
-            ]);
-            
-            // Ensure we always have arrays
-            const itemsData = Array.isArray(itemsRes.data) ? itemsRes.data : [];
-            const categoriesData = Array.isArray(categoriesRes.data) ? categoriesRes.data : [];
-            const historyData = Array.isArray(historyRes.data) ? historyRes.data : [];
-            
-            setItems(itemsData);
-            setCategories(categoriesData);
-            setItemHistory(historyData);
-            setStats({
-                totalItems: itemsData.length,
-                totalCategories: categoriesData.length,
-                totalRefills: historyData.filter(h => h.action === 'Refill').length,
-                totalWithdrawals: historyData.filter(h => h.action === 'Withdraw').length,
-            });
-            setLoading({ items: false, categories: false, history: false });
-        } catch (err) {
-            setError('Failed to fetch data.');
-            setLoading({ items: false, categories: false, history: false });
-            
-            // Set empty arrays on error
-            setItems([]);
-            setCategories([]);
-            setItemHistory([]);
-        }
+    // ===== DERIVED DATA =====
+    const filteredItems = items.filter(item => {
+        const matchesSearch = !searchTerm || item.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = categoryFilter === '0' || item.category._id === categoryFilter;
+        return matchesSearch && matchesCategory;
+    });
+
+    const lowStockItems = filteredItems.filter(item => item.quantity < item.threshold);
+
+    const stats = {
+        totalItems: items.length,
+        totalCategories: categories.length,
+        totalRefills: itemHistory.filter(h => h.action === 'Refill').length,
+        totalWithdrawals: itemHistory.filter(h => h.action === 'Withdraw').length,
     };
 
-    useEffect(() => {
-        fetchData();
-    }, []);
-
-    const filterItems = () => {
-        // Ensure items is always an array
-        const itemsArray = Array.isArray(items) ? items : [];
-        
-        let filtered = [...itemsArray];
-        if (searchTerm) {
-            filtered = filtered.filter(item =>
-                item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-        }
-        if (categoryFilter !== '0') {
-            filtered = filtered.filter(
-                item => item.category && item.category._id === categoryFilter
-            );
-        }
-        setFilteredItems(filtered);
-        // Check for low stock
-        const lowStock = filtered.filter(item => 
-            item.quantity !== undefined && item.threshold !== undefined && 
-            item.quantity < item.threshold
-        );
-        setLowStockItems(lowStock);
-    };
-
-    useEffect(() => {
-        filterItems();
-    }, [items, searchTerm, categoryFilter]);
-
-    const toggleDarkMode = () => {
-        setDarkMode(!darkMode);
-    };
-
-    const handleLogout = () => {
-        // Implement logout logic
-    };
-
-    const openModal = (modalName, item = null) => {
-        setActiveItem(item);
-        setModals(prev => ({ ...prev, [modalName]: true }));
-    };
-
-    const closeModal = (modalName) => {
-        setModals(prev => ({ ...prev, [modalName]: false }));
-    };
-
+    // ===== UTILS =====
     const getCategoryName = (categoryId) => {
-        if (!categoryId) return 'Unknown';
-        const category = categories.find(c => c._id === categoryId);
-        return category ? category.name : 'Unknown';
+        const cat = categories.find(c => c._id === categoryId);
+        return cat ? cat.name : 'Uncategorized';
     };
 
-    const handleAddCategory = () => {
-        if (!formData.newCategory.trim()) return;
-        const newCategory = {
-            _id: Date.now().toString(),
-            name: formData.newCategory.trim(),
-            color: '#6b7280'
-        };
-        setCategories(prev => [...prev, newCategory]);
-        setFormData({ ...formData, newCategory: '' });
+    const formatDate = (dateStr) => {
+        return new Date(dateStr).toLocaleString();
     };
 
+    const closeModal = (name) => {
+        setModals(prev => ({ ...prev, [name]: false }));
+        setActiveItem(null);
+    };
+
+    const openModal = (name, item = null) => {
+        setActiveItem(item);
+        if (name === 'refillItem' || name === 'withdrawItem') {
+            setFormData(prev => ({
+                ...prev,
+                refillQuantity: 1,
+                withdrawQuantity: 1,
+            }));
+        }
+        setModals(prev => ({ ...prev, [name]: true }));
+    };
+
+    // ===== ACTIONS =====
     const handleAddItem = () => {
-        if (!formData.itemName || !formData.itemCategory || !formData.itemQuantity || !formData.itemThreshold) return;
+        if (!formData.itemName || !formData.itemCategory) return;
         const newItem = {
-            _id: Date.now().toString(),
+            _id: `item${Date.now()}`,
             name: formData.itemName,
             category: categories.find(c => c._id === formData.itemCategory),
             quantity: Number(formData.itemQuantity),
             threshold: Number(formData.itemThreshold),
         };
         setItems(prev => [...prev, newItem]);
+        setFormData({
+            itemName: '',
+            itemCategory: '',
+            itemQuantity: 0,
+            itemThreshold: 1,
+        });
         closeModal('addItem');
     };
 
     const handleRefillItem = () => {
         if (!activeItem) return;
-        const quantityToAdd = prompt('Enter quantity to refill:', '0');
-        const qty = Number(quantityToAdd);
+        const qty = Number(formData.refillQuantity);
         if (isNaN(qty) || qty <= 0) return;
-        const updatedItems = items.map(item => {
-            if (item._id === activeItem._id) {
-                const newQty = item.quantity + qty;
-                // Add to history
-                setItemHistory(prev => [
-                    ...prev,
-                    {
-                        _id: Date.now().toString(),
-                        itemId: item._id,
-                        action: 'Refill',
-                        quantity: qty,
-                        purpose: 'Refilled stock',
-                        createdAt: new Date().toISOString(),
-                    },
-                ]);
-                return { ...item, quantity: newQty };
-            }
-            return item;
-        });
-        setItems(updatedItems);
+        setItems(prev =>
+            prev.map(item =>
+                item._id === activeItem._id
+                    ? { ...item, quantity: item.quantity + qty }
+                    : item
+            )
+        );
         closeModal('refillItem');
     };
 
     const handleWithdrawItem = () => {
         if (!activeItem) return;
-        const quantityToWithdraw = prompt('Enter quantity to withdraw:', '0');
-        const qty = Number(quantityToWithdraw);
+        const qty = Number(formData.withdrawQuantity);
         if (isNaN(qty) || qty <= 0 || qty > activeItem.quantity) return;
-        const updatedItems = items.map(item => {
-            if (item._id === activeItem._id) {
-                const newQty = item.quantity - qty;
-                setItemHistory(prev => [
-                    ...prev,
-                    {
-                        _id: Date.now().toString(),
-                        itemId: item._id,
-                        action: 'Withdraw',
-                        quantity: qty,
-                        purpose: 'Withdrawn stock',
-                        createdAt: new Date().toISOString(),
-                    },
-                ]);
-                return { ...item, quantity: newQty };
-            }
-            return item;
-        });
-        setItems(updatedItems);
+        setItems(prev =>
+            prev.map(item =>
+                item._id === activeItem._id
+                    ? { ...item, quantity: item.quantity - qty }
+                    : item
+            )
+        );
         closeModal('withdrawItem');
     };
 
     const handleDeleteItem = () => {
         if (!activeItem) return;
-        const updatedItems = items.filter(item => item._id !== activeItem._id);
-        setItems(updatedItems);
-        // Add to history
-        setItemHistory(prev => [
-            ...prev,
-            {
-                _id: Date.now().toString(),
-                itemId: activeItem._id,
-                action: 'Delete',
-                quantity: 0,
-                purpose: 'Item deleted',
-                createdAt: new Date().toISOString(),
-            },
-        ]);
+        setItems(prev => prev.filter(item => item._id !== activeItem._id));
         closeModal('deleteConfirm');
     };
 
-    const handleAddCategorySubmit = (e) => {
-        e.preventDefault();
-        handleAddCategory();
+    const handleLogout = () => {
+        alert('Logout clicked (demo)');
     };
 
-    const handleAddItemSubmit = (e) => {
-        e.preventDefault();
-        handleAddItem();
-    };
+    // ===== EFFECTS =====
+    useEffect(() => {
+        const isDark = localStorage.getItem('darkMode') === 'true';
+        setDarkMode(isDark);
+    }, []);
 
-    const formatDate = (dateStr) => {
-        const date = new Date(dateStr);
-        return date.toLocaleString();
-    };
+    useEffect(() => {
+        localStorage.setItem('darkMode', darkMode);
+        if (darkMode) {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
+        }
+    }, [darkMode]);
 
-    // Render logic
-    if (loading.items || loading.categories || loading.history) {
-        return (
-            <div className="app-container flex items-center justify-center min-h-screen">
-                <div className="text-center">
-                    <div className="inline-block w-8 h-8 border-4 border-t-transparent border-gray-900 dark:border-white rounded-full animate-spin"></div>
-                    <p className="mt-4 text-gray-700 dark:text-gray-300">Loading your inventory data...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="app-container flex items-center justify-center min-h-screen">
-                <div className="p-6 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 max-w-md text-center">
-                    <h3 className="text-lg font-medium text-red-800 dark:text-red-200 mb-2">⚠️ Oops! Something went wrong</h3>
-                    <p className="text-red-700 dark:text-red-300 mb-4">{error}</p>
-                    <button
-                        onClick={fetchData}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
-                    >
-                        Try Again
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    // Main UI
+    // ===== RENDER =====
     return (
         <div className={`app-container ${darkMode ? 'dark-mode' : ''}`}>
             {/* Mobile Header */}
-            <header className="mobile-header shadow-sm px-4 py-3 flex items-center justify-between">
-                <button
-                    className="btn btn-ghost"
-                    onClick={() => setSidebarOpen(!sidebarOpen)}
-                    aria-label="Toggle sidebar"
-                >
+            <header className="mobile-header">
+                <button onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle sidebar">
                     <Menu size={24} />
                 </button>
-                <div className="page-title font-semibold text-center flex-1 mx-2">
+                <div className="page-title">
                     {activePage === 'dashboard'
-                        ? 'Dashboard Overview'
+                        ? 'Dashboard'
                         : activePage === 'categories'
-                            ? 'Manage Categories'
-                            : 'Activity Log'}
+                            ? 'Categories'
+                            : 'History'}
                 </div>
-                <div className="header-actions">
-                    <button
-                        className="btn btn-ghost btn-circle"
-                        onClick={toggleDarkMode}
-                        aria-label="Toggle dark mode"
-                    >
-                        {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-                    </button>
-                </div>
+                <button onClick={() => setDarkMode(!darkMode)} aria-label="Toggle dark mode">
+                    {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+                </button>
             </header>
 
-            {/* Overlay for sidebar */}
+            {/* Overlay */}
             <div
                 className={`overlay ${sidebarOpen ? 'active' : ''}`}
                 onClick={() => setSidebarOpen(false)}
@@ -326,66 +217,57 @@ const Dashboard = () => {
 
             {/* Sidebar */}
             <aside className={`sidebar ${sidebarOpen ? 'active' : ''}`}>
-                {/* User profile */}
-                <div className="user-profile mb-8 flex items-center gap-4 px-4 py-3">
-                    <div className="avatar bg-gray-300 dark:bg-gray-600 rounded-full w-10 h-10 flex items-center justify-center text-xl font-semibold text-white">
+                <div className="user-profile">
+                    <div className="avatar">
                         {currentUser.username.charAt(0).toUpperCase()}
                     </div>
                     <div className="user-info">
-                        <div className="user-name font-semibold">{currentUser.username}</div>
-                        <div className="user-role text-sm text-gray-500">Administrator</div>
+                        <div className="user-name">{currentUser.username}</div>
+                        <div className="user-role">Administrator</div>
                     </div>
                 </div>
 
-                {/* Logo */}
-                <div className="logo mb-8 px-4">
-                    <h1 className="text-2xl font-bold">
-                        Inv<span className="text-emerald-500">Track</span>
+                <div className="logo">
+                    <h1>
+                        Inv<span className="text-emerald">Track</span>
                     </h1>
                 </div>
 
-                {/* Navigation */}
-                <nav className="main-nav mb-8 px-4">
-                    <ul className="space-y-2">
-                        <li>
-                            <button
-                                className={`nav-link flex items-center gap-2 px-4 py-2 rounded ${activePage === 'dashboard' ? 'bg-gray-200 dark:bg-gray-700' : ''
-                                    }`}
-                                onClick={() => setActivePage('dashboard')}
-                            >
-                                <Box size={20} />
-                                <span>Dashboard</span>
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                className={`nav-link flex items-center gap-2 px-4 py-2 rounded ${activePage === 'categories' ? 'bg-gray-200 dark:bg-gray-700' : ''
-                                    }`}
-                                onClick={() => setActivePage('categories')}
-                            >
-                                <Tag size={20} />
-                                <span>Categories</span>
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                className={`nav-link flex items-center gap-2 px-4 py-2 rounded ${activePage === 'history' ? 'bg-gray-200 dark:bg-gray-700' : ''
-                                    }`}
-                                onClick={() => setActivePage('history')}
-                            >
-                                <Clock size={20} />
-                                <span>History</span>
-                            </button>
-                        </li>
-                    </ul>
+                <nav className="main-nav">
+                    <button
+                        className={`nav-link ${activePage === 'dashboard' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActivePage('dashboard');
+                            setSidebarOpen(false);
+                        }}
+                    >
+                        <Box size={20} />
+                        <span>Dashboard</span>
+                    </button>
+                    <button
+                        className={`nav-link ${activePage === 'categories' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActivePage('categories');
+                            setSidebarOpen(false);
+                        }}
+                    >
+                        <Tag size={20} />
+                        <span>Categories</span>
+                    </button>
+                    <button
+                        className={`nav-link ${activePage === 'history' ? 'active' : ''}`}
+                        onClick={() => {
+                            setActivePage('history');
+                            setSidebarOpen(false);
+                        }}
+                    >
+                        <Clock size={20} />
+                        <span>History</span>
+                    </button>
                 </nav>
 
-                {/* Sidebar footer */}
-                <div className="sidebar-footer mt-auto pt-6 border-t border-gray-300 dark:border-gray-700 px-4 py-3 flex justify-center">
-                    <button
-                        className="btn btn-ghost flex items-center gap-2 w-full justify-start text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                        onClick={handleLogout}
-                    >
+                <div className="sidebar-footer">
+                    <button className="logout-btn" onClick={handleLogout}>
                         <LogOut size={20} />
                         <span>Log Out</span>
                     </button>
@@ -397,318 +279,150 @@ const Dashboard = () => {
                 {activePage === 'dashboard' && (
                     <div className="max-w-7xl mx-auto p-4">
                         {/* Header */}
-                        <div className="page-header mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                        <div className="page-header">
                             <div>
-                                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                                    Inventory Dashboard
-                                </h1>
-                                <p className="text-lg text-gray-600 dark:text-gray-300 mt-2">
-                                    Monitor stock levels, track activity, and manage your assets.
-                                </p>
+                                <h1 className="text-3xl font-bold">Inventory Dashboard</h1>
+                                <p className="text-lg mt-2">Monitor stock levels and manage your assets.</p>
                             </div>
-                            <div className="actions">
-                                <button className="btn btn-primary flex items-center gap-2" onClick={() => openModal('addItem')}>
-                                    <Plus size={20} />
-                                    <span>Add Item</span>
-                                </button>
-                            </div>
+                            <button className="btn btn-primary" onClick={() => openModal('addItem')}>
+                                <Plus size={20} />
+                                Add Item
+                            </button>
                         </div>
 
-                        {/* Stats cards */}
-                        <div className="stats-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                            {/* Total Items */}
-                            <div className="stat-card bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-6 flex items-center justify-start gap-4 transition hover:bg-gray-50 dark:hover:bg-gray-700">
-                                <div className="stat-icon text-emerald-500">
-                                    <Box size={32} />
-                                </div>
-                                <div className="stat-content">
-                                    <div className="stat-number text-3xl font-bold">{stats.totalItems}</div>
-                                    <div className="stat-label text-gray-600 dark:text-gray-400">Total Items</div>
-                                </div>
-                            </div>
-                            
-                            {/* Total Categories */}
-                            <div className="stat-card bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-6 flex items-center justify-start gap-4 transition hover:bg-gray-50 dark:hover:bg-gray-700">
-                                <div className="stat-icon text-blue-500">
-                                    <Tag size={32} />
-                                </div>
-                                <div className="stat-content">
-                                    <div className="stat-number text-3xl font-bold">{stats.totalCategories}</div>
-                                    <div className="stat-label text-gray-600 dark:text-gray-400">Categories</div>
-                                </div>
-                            </div>
-                            
-                            {/* Total Refills */}
-                            <div className="stat-card bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-6 flex items-center justify-start gap-4 transition hover:bg-gray-50 dark:hover:bg-gray-700">
-                                <div className="stat-icon text-green-500">
-                                    <Plus size={32} />
-                                </div>
-                                <div className="stat-content">
-                                    <div className="stat-number text-3xl font-bold">{stats.totalRefills}</div>
-                                    <div className="stat-label text-gray-600 dark:text-gray-400">Refills</div>
-                                </div>
-                            </div>
-                            
-                            {/* Total Withdrawals */}
-                            <div className="stat-card bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-6 flex items-center justify-start gap-4 transition hover:bg-gray-50 dark:hover:bg-gray-700">
-                                <div className="stat-icon text-red-500">
-                                    <Box size={32} />
-                                </div>
-                                <div className="stat-content">
-                                    <div className="stat-number text-3xl font-bold">{stats.totalWithdrawals}</div>
-                                    <div className="stat-label text-gray-600 dark:text-gray-400">Withdrawals</div>
-                                </div>
-                            </div>
+                        {/* Stats */}
+                        <div className="stats-grid">
+                            <StatCard icon={<Box size={32} />} value={stats.totalItems} label="Total Items" color="emerald" />
+                            <StatCard icon={<Tag size={32} />} value={stats.totalCategories} label="Categories" color="blue" />
+                            <StatCard icon={<Plus size={32} />} value={stats.totalRefills} label="Refills" color="green" />
+                            <StatCard icon={<Box size={32} />} value={stats.totalWithdrawals} label="Withdrawals" color="red" />
                         </div>
 
                         {/* Filters */}
-                        <div className="filters mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                                {/* Search box */}
-                                <div className="relative flex-1 max-w-md">
+                        <div className="filters">
+                            <div className="filter-row">
+                                <div className="search-box">
+                                    <Search size={20} className="search-icon" />
                                     <input
                                         type="text"
                                         placeholder="Search items..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                     />
-                                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                                        <Search size={20} />
-                                    </div>
                                 </div>
-                                {/* Filters dropdowns & buttons */}
-                                <div className="flex items-center space-x-4">
-                                    <select
-                                        value={categoryFilter}
-                                        onChange={(e) => setCategoryFilter(e.target.value)}
-                                        className="p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    >
+                                <div className="filter-actions">
+                                    <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
                                         <option value="0">All Categories</option>
-                                        {categories.map((cat) => (
+                                        {categories.map(cat => (
                                             <option key={cat._id} value={cat._id}>{cat.name}</option>
                                         ))}
                                     </select>
                                     {lowStockItems.length > 0 && (
-                                        <button
-                                            className="btn btn-outline-danger relative"
-                                            onClick={() => openModal('lowStockModal')}
-                                        >
+                                        <button className="btn btn-outline-danger relative" onClick={() => openModal('lowStockModal')}>
                                             <Bell size={20} />
-                                            <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full">
-                                                {lowStockItems.length}
-                                            </span>
+                                            <span className="notification-badge">{lowStockItems.length}</span>
                                         </button>
                                     )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Inventory Table */}
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-                                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Inventory Items</h2>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">Showing {filteredItems.length} items</p>
+                        {/* Table */}
+                        <div className="table-card">
+                            <div className="table-header">
+                                <h2>Inventory Items</h2>
+                                <span>Showing {filteredItems.length} items</span>
                             </div>
-                            <div className="overflow-x-auto">
-                                {filteredItems.length === 0 ? (
-                                    <div className="text-center py-16 px-6">
-                                        <div className="text-gray-400 dark:text-gray-500 mb-4">
-                                            <Box size={48} />
-                                        </div>
-                                        <h3 className="text-xl font-medium text-gray-900 dark:text-white mb-2">
-                                            No items found
-                                        </h3>
-                                        <p className="text-gray-600 dark:text-gray-400 mb-6">
-                                            {searchTerm || categoryFilter !== '0'
-                                                ? "Try adjusting your search or filter criteria."
-                                                : "Get started by adding your first inventory item."}
-                                        </p>
-                                        {!searchTerm && categoryFilter === '0' && (
-                                            <button className="btn btn-primary" onClick={() => openModal('addItem')}>
-                                                <Plus size={20} />
-                                                Add Your First Item
-                                            </button>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-gray-50 dark:bg-gray-700/50">
+                            {filteredItems.length === 0 ? (
+                                <div className="empty-state">
+                                    <Box size={48} />
+                                    <h3>No items found</h3>
+                                    <p>{searchTerm || categoryFilter !== '0' ? "Try adjusting filters." : "Add your first item to get started."}</p>
+                                    {!searchTerm && categoryFilter === '0' && (
+                                        <button className="btn btn-primary" onClick={() => openModal('addItem')}>
+                                            <Plus size={20} /> Add Item
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="table-responsive">
+                                    <table>
+                                        <thead>
                                             <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">ID</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Item Name</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Category</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Quantity</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Threshold</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                                <th>ID</th>
+                                                <th>Item Name</th>
+                                                <th>Category</th>
+                                                <th>Qty</th>
+                                                <th>Threshold</th>
+                                                <th>Status</th>
+                                                <th className="text-right">Actions</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                            {filteredItems.map((item) => {
+                                        <tbody>
+                                            {filteredItems.map(item => {
                                                 const isLow = item.quantity < item.threshold;
                                                 return (
-                                                    <tr
-                                                        key={item._id}
-                                                        className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${isLow ? 'bg-red-50 dark:bg-red-900/10' : ''
-                                                            }`}
-                                                    >
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
-                                                            {item._id.toString().slice(-6)}
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap">
-                                                            <div className="text-sm font-medium">{item.name}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap">
-                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                                                                {getCategoryName(item.category ? item.category._id : '')}
+                                                    <tr key={item._id} className={isLow ? 'low-stock-row' : ''}>
+                                                        <td>{item._id.slice(-6)}</td>
+                                                        <td>{item.name}</td>
+                                                        <td>
+                                                            <span className="category-badge" style={{ backgroundColor: item.category.color + '20', color: item.category.color }}>
+                                                                {item.category.name}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{item.quantity}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{item.threshold}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap">
-                                                            <span
-                                                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isLow
-                                                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                                                                    : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                                                    }`}
-                                                            >
+                                                        <td className="font-medium">{item.quantity}</td>
+                                                        <td>{item.threshold}</td>
+                                                        <td>
+                                                            <span className={`status-badge ${isLow ? 'low' : 'good'}`}>
                                                                 {isLow ? 'Low Stock' : 'In Stock'}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                            <div className="flex items-center justify-end space-x-2">
-                                                                <button
-                                                                    className="btn btn-sm btn-ghost text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                                                    onClick={() => openModal('itemHistory', item)}
-                                                                    title="View History"
-                                                                >
-                                                                    History
-                                                                </button>
-                                                                <button
-                                                                    className="btn btn-sm btn-ghost text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
-                                                                    onClick={() => openModal('refillItem', item)}
-                                                                    title="Refill Stock"
-                                                                >
-                                                                    Refill
-                                                                </button>
-                                                                <button
-                                                                    className="btn btn-sm btn-ghost text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
-                                                                    onClick={() => openModal('withdrawItem', item)}
-                                                                    title="Withdraw Item"
-                                                                >
-                                                                    Withdraw
-                                                                </button>
-                                                                <button
-                                                                    className="btn btn-sm btn-ghost text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                                                                    onClick={() => openModal('deleteConfirm', item)}
-                                                                    title="Delete Item"
-                                                                >
-                                                                    Delete
-                                                                </button>
-                                                            </div>
+                                                        <td className="text-right">
+                                                            <button className="action-btn text-blue-600 dark:text-blue-400" onClick={() => openModal('itemHistory', item)}>
+                                                                History
+                                                            </button>
+                                                            <button className="action-btn text-emerald-600 dark:text-emerald-400" onClick={() => openModal('refillItem', item)}>
+                                                                Refill
+                                                            </button>
+                                                            <button className="action-btn text-green-600 dark:text-green-400" onClick={() => openModal('withdrawItem', item)}>
+                                                                Withdraw
+                                                            </button>
+                                                            <button className="action-btn text-red-600 dark:text-red-400" onClick={() => openModal('deleteConfirm', item)}>
+                                                                Delete
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                 );
                                             })}
                                         </tbody>
                                     </table>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
 
                 {activePage === 'categories' && (
                     <div className="max-w-7xl mx-auto p-4">
-                        {/* Header */}
-                        <div className="page-header mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                        <div className="page-header">
                             <div>
-                                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                                    Category Management
-                                </h1>
-                                <p className="text-lg text-gray-600 dark:text-gray-300 mt-2">
-                                    Organize your inventory by creating and managing categories.
-                                </p>
+                                <h1 className="text-3xl font-bold">Category Management</h1>
+                                <p className="text-lg mt-2">Organize your inventory with custom categories.</p>
                             </div>
-                            <div className="actions">
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={() => setActivePage('dashboard')}
-                                >
-                                    <Box size={20} />
-                                    <span>Back to Dashboard</span>
-                                </button>
-                            </div>
+                            <button className="btn btn-secondary" onClick={() => setActivePage('dashboard')}>
+                                Back to Dashboard
+                            </button>
                         </div>
-
-                        {/* Add Category Form */}
-                        <div className="add-category-form mb-8 p-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Add New Category</h3>
-                            <form
-                                className="flex flex-col sm:flex-row gap-4"
-                                onSubmit={handleAddCategorySubmit}
-                            >
-                                <input
-                                    type="text"
-                                    placeholder="e.g., Consumables, Tools, Software"
-                                    value={formData.newCategory}
-                                    onChange={(e) => setFormData({ ...formData, newCategory: e.target.value })}
-                                    className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    required
-                                />
-                                <button type="submit" className="btn btn-primary whitespace-nowrap">
-                                    <Plus size={20} />
-                                    <span>Add Category</span>
-                                </button>
-                            </form>
-                        </div>
-
-                        {/* Categories Table */}
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-                                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Existing Categories</h2>
-                            </div>
-                            <div className="overflow-x-auto p-4">
-                                {categories.length === 0 ? (
-                                    <div className="text-center py-12">
-                                        <p className="text-gray-600 dark:text-gray-400">No categories have been created yet.</p>
+                        <div className="add-category-form">
+                            <h3>Add New Category</h3>
+                            <p className="text-gray-500 dark:text-gray-400 mb-3">Categories are predefined in this demo.</p>
+                            <div className="category-list">
+                                {categories.map(cat => (
+                                    <div key={cat._id} className="category-item">
+                                        <span className="category-color" style={{ backgroundColor: cat.color }}></span>
+                                        {cat.name}
                                     </div>
-                                ) : (
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-gray-50 dark:bg-gray-700/50">
-                                            <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Color</th>
-                                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                            {categories.map((cat) => (
-                                                <tr key={cat._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                                                        {cat.name}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span
-                                                            className="inline-block w-4 h-4 rounded-full border"
-                                                            style={{
-                                                                backgroundColor: cat.color || '#6b7280',
-                                                                borderColor: cat.color || '#6b7280',
-                                                            }}
-                                                        ></span>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                        <div className="flex items-center justify-end space-x-2">
-                                                            <button className="btn btn-sm btn-outline-warning">Edit</button>
-                                                            <button className="btn btn-sm btn-outline-danger">Delete</button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -716,411 +430,250 @@ const Dashboard = () => {
 
                 {activePage === 'history' && (
                     <div className="max-w-7xl mx-auto p-4">
-                        {/* Header */}
-                        <div className="page-header mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                        <div className="page-header">
                             <div>
-                                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                                    Activity History
-                                </h1>
-                                <p className="text-lg text-gray-600 dark:text-gray-300 mt-2">
-                                    Review a log of all inventory actions and changes.
-                                </p>
+                                <h1 className="text-3xl font-bold">Activity History</h1>
+                                <p className="text-lg mt-2">Review all inventory actions.</p>
                             </div>
-                            <div className="actions">
-                                <button className="btn btn-secondary" onClick={() => setActivePage('dashboard')}>
-                                    <Box size={20} />
-                                    <span>Back to Dashboard</span>
-                                </button>
-                            </div>
+                            <button className="btn btn-secondary" onClick={() => setActivePage('dashboard')}>
+                                Back to Dashboard
+                            </button>
                         </div>
-
-                        {/* Filters */}
-                        <div className="filters mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Filter Activity</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                                {/* Date filters */}
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Start Date</label>
-                                    <input
-                                        type="date"
-                                        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">End Date</label>
-                                    <input
-                                        type="date"
-                                        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    />
-                                </div>
-                                {/* Action type */}
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Action Type</label>
-                                    <select className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                                        <option value="">All Actions</option>
-                                        <option value="Refill">Refill</option>
-                                        <option value="Withdraw">Withdraw</option>
-                                        <option value="Add">Add</option>
-                                        <option value="Edit">Edit</option>
-                                        <option value="Delete">Delete</option>
-                                    </select>
-                                </div>
-                                {/* Buttons */}
-                                <div className="flex flex-col justify-end">
-                                    <button className="btn btn-primary mb-2">Apply Filters</button>
-                                    <button className="btn btn-outline-secondary">Clear Filters</button>
-                                </div>
-                            </div>
+                        <div className="filters">
+                            <h3>Filter Activity</h3>
+                            <p className="text-gray-500 dark:text-gray-400">Filtering is disabled in this demo.</p>
                         </div>
-
-                        {/* History Table */}
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-                                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Recent Activity</h2>
+                        <div className="table-card">
+                            <div className="table-header">
+                                <h2>Recent Activity</h2>
                             </div>
-                            <div className="overflow-x-auto p-4">
-                                {itemHistory.length === 0 ? (
-                                    <div className="text-center py-16">
-                                        <div className="text-gray-400 dark:text-gray-500 mb-4">
-                                            <Clock size={48} />
-                                        </div>
-                                        <h3 className="text-xl font-medium text-gray-900 dark:text-white mb-2">No Activity Logged</h3>
-                                        <p className="text-gray-600 dark:text-gray-400">
-                                            Activity will appear here as you add, withdraw, or update items.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-gray-50 dark:bg-gray-700/50">
-                                            <tr>
-                                                <th className="px-4 py-2 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Date & Time</th>
-                                                <th className="px-4 py-2 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Action</th>
-                                                <th className="px-4 py-2 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Quantity</th>
-                                                <th className="px-4 py-2 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Purpose</th>
-                                                <th className="px-4 py-2 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Timestamp</th>
+                            <div className="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Date & Time</th>
+                                            <th>Action</th>
+                                            <th>Quantity</th>
+                                            <th>Purpose</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {[...itemHistory].reverse().map(entry => (
+                                            <tr key={entry._id}>
+                                                <td>{formatDate(entry.createdAt)}</td>
+                                                <td>
+                                                    <span className={`status-badge ${entry.action.toLowerCase()}`}>
+                                                        {entry.action}
+                                                    </span>
+                                                </td>
+                                                <td>{entry.quantity}</td>
+                                                <td>{entry.purpose}</td>
                                             </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                            {itemHistory
-                                                .slice()
-                                                .reverse()
-                                                .map((entry) => (
-                                                    <tr
-                                                        key={entry._id}
-                                                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                                    >
-                                                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                                                            {formatDate(entry.createdAt)}
-                                                        </td>
-                                                        <td className="px-4 py-3 whitespace-nowrap">
-                                                            <span
-                                                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${entry.action === 'Refill'
-                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                                                    : entry.action === 'Withdraw'
-                                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                                                                        : entry.action === 'Add'
-                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                                                                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                                                    }`}
-                                                            >
-                                                                {entry.action}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                                                            {entry.quantity}
-                                                        </td>
-                                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                                            {entry.purpose || '—'}
-                                                        </td>
-                                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(entry.createdAt)}</td>
-                                                    </tr>
-                                                ))}
-                                        </tbody>
-                                    </table>
-                                )}
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
                 )}
             </main>
 
-            {/* Modals */}
+            {/* ===== MODALS ===== */}
+            {/* Add Item */}
             {modals.addItem && (
-                <div className="modal-overlay">
-                    <div className="modal-dialog">
-                        <div className="modal-content">
-                            <div className="modal-header flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                                <h3 className="text-xl font-semibold">Add New Inventory Item</h3>
-                                <button className="modal-close" onClick={() => closeModal('addItem')}>
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <div className="modal-body p-6">
-                                <form className="space-y-4" onSubmit={handleAddItemSubmit}>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Item Name *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g., Dell Monitor, A4 Paper"
-                                            value={formData.itemName}
-                                            onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
-                                            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Category *
-                                        </label>
-                                        <select
-                                            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                            value={formData.itemCategory}
-                                            onChange={(e) => setFormData({ ...formData, itemCategory: e.target.value })}
-                                            required
-                                        >
-                                            <option value="">-- Select a Category --</option>
-                                            {categories.map((cat) => (
-                                                <option key={cat._id} value={cat._id}>{cat.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                Initial Quantity *
-                                            </label>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                                value={formData.itemQuantity}
-                                                onChange={(e) => setFormData({ ...formData, itemQuantity: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                Low Stock Threshold *
-                                            </label>
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                                value={formData.itemThreshold}
-                                                onChange={(e) => setFormData({ ...formData, itemThreshold: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                </form>
-                            </div>
-                            <div className="modal-footer p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={() => closeModal('addItem')}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={handleAddItem}
-                                >
-                                    Add Item
-                                </button>
-                            </div>
+                <Modal title="Add New Item" onClose={() => closeModal('addItem')}>
+                    <div className="modal-form">
+                        <Input label="Item Name *" value={formData.itemName} onChange={(v) => setFormData({ ...formData, itemName: v })} />
+                        <Select
+                            label="Category *"
+                            value={formData.itemCategory}
+                            onChange={(v) => setFormData({ ...formData, itemCategory: v })}
+                            options={categories.map(c => ({ value: c._id, label: c.name }))}
+                        />
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input
+                                label="Initial Quantity *"
+                                type="number"
+                                min="0"
+                                value={formData.itemQuantity}
+                                onChange={(v) => setFormData({ ...formData, itemQuantity: v })}
+                            />
+                            <Input
+                                label="Low Stock Threshold *"
+                                type="number"
+                                min="1"
+                                value={formData.itemThreshold}
+                                onChange={(v) => setFormData({ ...formData, itemThreshold: v })}
+                            />
                         </div>
                     </div>
-                </div>
+                    <div className="modal-footer">
+                        <button className="btn btn-secondary" onClick={() => closeModal('addItem')}>Cancel</button>
+                        <button className="btn btn-primary" onClick={handleAddItem}>Add Item</button>
+                    </div>
+                </Modal>
             )}
 
-            {/* Refill Modal */}
+            {/* Refill */}
             {modals.refillItem && (
-                <div className="modal-overlay">
-                    <div className="modal-dialog">
-                        <div className="modal-content">
-                            <div className="modal-header flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                                <h3 className="text-xl font-semibold">Refill Stock</h3>
-                                <button className="modal-close" onClick={() => closeModal('refillItem')}>
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <div className="modal-body p-6">
-                                <p className="mb-4">Refilling item: <strong>{activeItem?.name}</strong></p>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    placeholder="Enter quantity"
-                                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    onChange={(e) => setFormData({ ...formData, refillQuantity: e.target.value })}
-                                />
-                            </div>
-                            <div className="modal-footer p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-                                <button className="btn btn-secondary" onClick={() => closeModal('refillItem')}>
-                                    Cancel
-                                </button>
-                                <button className="btn btn-primary" onClick={handleRefillItem}>
-                                    Refill
-                                </button>
-                            </div>
-                        </div>
+                <Modal title="Refill Stock" onClose={() => closeModal('refillItem')}>
+                    <p>Refilling: <strong>{activeItem?.name}</strong></p>
+                    <Input
+                        label="Quantity to Add"
+                        type="number"
+                        min="1"
+                        value={formData.refillQuantity}
+                        onChange={(v) => setFormData({ ...formData, refillQuantity: v })}
+                    />
+                    <div className="modal-footer">
+                        <button className="btn btn-secondary" onClick={() => closeModal('refillItem')}>Cancel</button>
+                        <button className="btn btn-primary" onClick={handleRefillItem}>Refill</button>
                     </div>
-                </div>
+                </Modal>
             )}
 
-            {/* Withdraw Modal */}
+            {/* Withdraw */}
             {modals.withdrawItem && (
-                <div className="modal-overlay">
-                    <div className="modal-dialog">
-                        <div className="modal-content">
-                            <div className="modal-header flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                                <h3 className="text-xl font-semibold">Withdraw Stock</h3>
-                                <button className="modal-close" onClick={() => closeModal('withdrawItem')}>
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <div className="modal-body p-6">
-                                <p className="mb-4">Withdrawing from: <strong>{activeItem?.name}</strong></p>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    placeholder="Enter quantity"
-                                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    onChange={(e) => setFormData({ ...formData, withdrawQuantity: e.target.value })}
-                                />
-                            </div>
-                            <div className="modal-footer p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-                                <button className="btn btn-secondary" onClick={() => closeModal('withdrawItem')}>
-                                    Cancel
-                                </button>
-                                <button className="btn btn-primary" onClick={handleWithdrawItem}>
-                                    Withdraw
-                                </button>
-                            </div>
-                        </div>
+                <Modal title="Withdraw Stock" onClose={() => closeModal('withdrawItem')}>
+                    <p>Withdrawing from: <strong>{activeItem?.name}</strong></p>
+                    <Input
+                        label="Quantity to Withdraw"
+                        type="number"
+                        min="1"
+                        max={activeItem?.quantity}
+                        value={formData.withdrawQuantity}
+                        onChange={(v) => setFormData({ ...formData, withdrawQuantity: v })}
+                    />
+                    <div className="modal-footer">
+                        <button className="btn btn-secondary" onClick={() => closeModal('withdrawItem')}>Cancel</button>
+                        <button className="btn btn-primary" onClick={handleWithdrawItem}>Withdraw</button>
                     </div>
-                </div>
+                </Modal>
             )}
 
-            {/* Delete Confirmation Modal */}
+            {/* Delete */}
             {modals.deleteConfirm && (
-                <div className="modal-overlay">
-                    <div className="modal-dialog">
-                        <div className="modal-content">
-                            <div className="modal-header flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                                <h3 className="text-xl font-semibold text-red-600">Delete Item</h3>
-                                <button className="modal-close" onClick={() => closeModal('deleteConfirm')}>
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <div className="modal-body p-6">
-                                <p>Are you sure you want to delete <strong>{activeItem?.name}</strong>?</p>
-                            </div>
-                            <div className="modal-footer p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-                                <button className="btn btn-secondary" onClick={() => closeModal('deleteConfirm')}>
-                                    Cancel
-                                </button>
-                                <button className="btn btn-danger" onClick={handleDeleteItem}>
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
+                <Modal title="Confirm Deletion" onClose={() => closeModal('deleteConfirm')}>
+                    <div className="text-center py-4">
+                        <AlertTriangle className="mx-auto text-red-500" size={48} />
+                        <p className="mt-4">
+                            Are you sure you want to delete <strong>{activeItem?.name}</strong>?<br />
+                            This action cannot be undone.
+                        </p>
                     </div>
-                </div>
+                    <div className="modal-footer">
+                        <button className="btn btn-secondary" onClick={() => closeModal('deleteConfirm')}>Cancel</button>
+                        <button className="btn btn-danger" onClick={handleDeleteItem}>Delete</button>
+                    </div>
+                </Modal>
             )}
 
-            {/* Low Stock Modal */}
+            {/* Low Stock */}
             {modals.lowStockModal && (
-                <div className="modal-overlay">
-                    <div className="modal-dialog">
-                        <div className="modal-content">
-                            <div className="modal-header flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                                <h3 className="text-xl font-semibold">Low Stock Items</h3>
-                                <button className="modal-close" onClick={() => closeModal('lowStockModal')}>
-                                    <X size={24} />
-                                </button>
+                <Modal title="Low Stock Alerts" onClose={() => closeModal('lowStockModal')}>
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {lowStockItems.map(item => (
+                            <div key={item._id} className="p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
+                                <div className="font-medium">{item.name}</div>
+                                <div className="text-sm text-gray-600 dark:text-gray-300">
+                                    {item.quantity} in stock (threshold: {item.threshold})
+                                </div>
                             </div>
-                            <div className="modal-body p-6 max-h-96 overflow-y-auto">
-                                {lowStockItems.length === 0 ? (
-                                    <p>No low stock items.</p>
-                                ) : (
-                                    lowStockItems.map((item) => (
-                                        <div key={item._id} className="mb-2 p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                            <p className="mb-1 font-semibold">{item.name}</p>
-                                            <p className="text-sm">Quantity: {item.quantity}</p>
-                                            <p className="text-sm">Threshold: {item.threshold}</p>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
+                        ))}
                     </div>
-                </div>
+                </Modal>
             )}
 
-            {/* Item History Modal */}
+            {/* Item History */}
             {modals.itemHistory && (
-                <div className="modal-overlay">
-                    <div className="modal-dialog max-w-3xl">
-                        <div className="modal-content">
-                            <div className="modal-header flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                                <h3 className="text-xl font-semibold">Item History - {activeItem?.name}</h3>
-                                <button className="modal-close" onClick={() => closeModal('itemHistory')}>
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <div className="modal-body p-6 max-h-96 overflow-y-auto">
-                                {itemHistory.length === 0 ? (
-                                    <p>No history available for this item.</p>
-                                ) : (
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr>
-                                                <th className="p-2 px-4 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Date</th>
-                                                <th className="p-2 px-4 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Action</th>
-                                                <th className="p-2 px-4 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Quantity</th>
-                                                <th className="p-2 px-4 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Purpose</th>
-                                                <th className="p-2 px-4 text-left uppercase tracking-wider text-gray-500 dark:text-gray-300">Timestamp</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                            {itemHistory
-                                                .slice()
-                                                .reverse()
-                                                .filter(entry => entry.itemId === activeItem?._id)
-                                                .map((entry) => (
-                                                    <tr key={entry._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                                        <td className="p-2 px-4">{formatDate(entry.createdAt)}</td>
-                                                        <td className="p-2 px-4">
-                                                            <span
-                                                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${entry.action === 'Refill'
-                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                                                    : entry.action === 'Withdraw'
-                                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                                                                        : entry.action === 'Add'
-                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                                                                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                                                    }`}
-                                                            >
-                                                                {entry.action}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-2 px-4">{entry.quantity}</td>
-                                                        <td className="p-2 px-4">{entry.purpose || '—'}</td>
-                                                        <td className="p-2 px-4">{formatDate(entry.createdAt)}</td>
-                                                    </tr>
-                                                ))}
-                                        </tbody>
-                                    </table>
-                                )}
-                            </div>
-                        </div>
+                <Modal title={`Item History - ${activeItem?.name}`} onClose={() => closeModal('itemHistory')}>
+                    <div className="max-h-96 overflow-y-auto">
+                        <table className="modal-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Action</th>
+                                    <th>Qty</th>
+                                    <th>Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {itemHistory
+                                    .filter(h => h.itemId === activeItem?._id)
+                                    .reverse()
+                                    .map(entry => (
+                                        <tr key={entry._id}>
+                                            <td>{formatDate(entry.createdAt)}</td>
+                                            <td>
+                                                <span className={`status-badge ${entry.action.toLowerCase()}`}>
+                                                    {entry.action}
+                                                </span>
+                                            </td>
+                                            <td>{entry.quantity}</td>
+                                            <td>{entry.purpose}</td>
+                                        </tr>
+                                    ))}
+                            </tbody>
+                        </table>
+                        {itemHistory.filter(h => h.itemId === activeItem?._id).length === 0 && (
+                            <p className="text-center py-4 text-gray-500">No history available.</p>
+                        )}
                     </div>
-                </div>
+                </Modal>
             )}
         </div>
     );
 };
+
+// ===== SUBCOMPONENTS =====
+const StatCard = ({ icon, value, label, color }) => (
+    <div className={`stat-card stat-${color}`}>
+        <div className="stat-icon">{icon}</div>
+        <div className="stat-content">
+            <div className="stat-number">{value}</div>
+            <div className="stat-label">{label}</div>
+        </div>
+    </div>
+);
+
+const Modal = ({ title, children, onClose }) => (
+    <div className="modal-overlay">
+        <div className="modal-dialog">
+            <div className="modal-content">
+                <div className="modal-header">
+                    <h3>{title}</h3>
+                    <button onClick={onClose}><X size={24} /></button>
+                </div>
+                <div className="modal-body">{children}</div>
+            </div>
+        </div>
+    </div>
+);
+
+const Input = ({ label, value, onChange, type = 'text', min, max }) => (
+    <div className="form-group">
+        <label>{label}</label>
+        <input
+            type={type}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            min={min}
+            max={max}
+            className="form-input"
+        />
+    </div>
+);
+
+const Select = ({ label, value, onChange, options }) => (
+    <div className="form-group">
+        <label>{label}</label>
+        <select value={value} onChange={(e) => onChange(e.target.value)} className="form-input">
+            <option value="">-- Select --</option>
+            {options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+        </select>
+    </div>
+);
 
 export default Dashboard;
