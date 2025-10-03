@@ -1,0 +1,219 @@
+/* General container styles */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  font-family: 'Inter', sans-serif;
+  background-color: #f9fafb; /* Light background */
+  transition: background-color 0.3s ease;
+}
+
+.dark-mode {
+  background-color: #111827; /* Dark background */
+}
+
+/* Header styles */
+.mobile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  z-index: 50;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mobile-header {
+    background-color: #1f2937;
+  }
+}
+
+/* Sidebar styles */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 16rem; /* 64 */
+  background-color: #fff;
+  padding: 1rem;
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  z-index: 40;
+}
+
+.sidebar.active {
+  transform: translateX(0);
+}
+
+@media (prefers-color-scheme: dark) {
+  .sidebar {
+    background-color: #111827;
+  }
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 30;
+}
+
+.overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Main content styles */
+.main-content {
+  margin-left: 0;
+  padding: 2rem;
+  margin-top: 4rem; /* for header */
+  transition: margin-left 0.3s ease;
+}
+
+@media (min-width: 1024px) {
+  /* For larger screens, keep sidebar visible */
+  .main-content {
+    margin-left: 16rem;
+  }
+}
+
+/* Card styles for stats & sections */
+.stat-card {
+  background-color: #fff;
+  border-radius: 0.75rem; /* rounded-xl */
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: background-color 0.2s;
+}
+
+.dark-mode .stat-card {
+  background-color: #1f2937;
+}
+
+/* Responsive table styles */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem; /* text-sm */
+}
+
+thead {
+  background-color: #f3f4f6; /* Tailwind bg-gray-50 */
+}
+
+.dark-mode thead {
+  background-color: #374151; /* Tailwind gray-700 */
+}
+
+th, td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb; /* light border */
+}
+
+@media (prefers-color-scheme: dark) {
+  th, td {
+    border-color: #374151;
+  }
+}
+
+/* Buttons */
+.btn {
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.btn-primary {
+  background-color: #22c55e; /* emerald-500 */
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #16a34a;
+}
+
+/* Other button variants */
+.btn-secondary {
+  background-color: #e5e7eb; /* gray-200 */
+  color: #374151; /* gray-700 */
+}
+
+.btn-secondary:hover {
+  background-color: #d1d5db;
+}
+
+.btn-outline-danger {
+  border: 2px solid #ef4444; /* red-500 */
+  color: #ef4444;
+  background: transparent;
+}
+
+.btn-outline-danger:hover {
+  background-color: #fee2e2;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.modal-dialog {
+  background: #fff;
+  border-radius: 0.75rem;
+  max-width: 90%;
+  width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  transition: background-color 0.3s;
+}
+
+.dark-mode .modal-dialog {
+  background-color: #1f2937;
+}
+
+.modal-header, .modal-footer {
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  /* For small screens, make modals full width */
+  .modal-dialog {
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    border-radius: 0;
+  }
+}
